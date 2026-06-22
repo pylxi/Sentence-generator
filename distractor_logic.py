@@ -167,11 +167,19 @@ def passes_sentence_frame_filter(sentence: str, target_headword: str, distractor
 _POS_TO_WN = {"noun": "n", "verb": "v", "adjective": "a", "adverb": "r"}
 
 
+def _shares_topic(row_a, core1: str, core2: str) -> bool:
+    """CoreInventory topic-tag overlap — used as Slot A fallback when WordNet finds no pool match."""
+    topics_a = {str(row_a.get("CoreInventory 1", "")), str(row_a.get("CoreInventory 2", ""))}
+    topics_a.discard("")
+    topics_b = {core1, core2}
+    topics_b.discard("")
+    return bool(topics_a & topics_b)
+
+
 def _get_wordnet_synonyms(word: str, pos: str) -> set:
     """
-    Return near-synonym headwords using WordNet synsets.
-    Looks at the top 3 senses to avoid noise from rare meanings.
-    Multi-word lemmas (e.g. 'give_up') are excluded — CEFR list uses single tokens.
+    Return near-synonym headwords using WordNet synsets (top 3 senses).
+    Multi-word lemmas excluded — CEFR list uses single tokens.
     Falls back to an empty set if WordNet is unavailable.
     """
     try:
@@ -194,6 +202,82 @@ def _get_wordnet_synonyms(word: str, pos: str) -> set:
     except Exception:
         pass
     return synonyms
+
+
+def _get_wordnet_siblings(word: str, pos: str) -> set:
+    """
+    Return co-hyponym headwords via WordNet hypernym→hyponym path.
+
+    Per Susanti et al. (2018): siblings share the same hypernym, so they're
+    semantically related but meaningfully distinct — ideal distractors because
+    they occupy the same semantic category as the target word.
+
+    E.g. for 'dog' (animal): cat, horse, rabbit, wolf, …
+    E.g. for 'happy' (positive emotion adjective): joyful, content, elated, …
+
+    Only top-2 senses checked to avoid noise from rare/metaphorical meanings.
+    Multi-word lemmas excluded.
+    """
+    try:
+        from nltk.corpus import wordnet as wn
+    except Exception:
+        return set()
+
+    wn_pos = _POS_TO_WN.get((pos or "").strip().lower())
+    if wn_pos is None:
+        return set()
+
+    siblings: set = set()
+    try:
+        synsets = wn.synsets(word.lower(), pos=wn_pos)
+        for syn in synsets[:2]:
+            for hypernym in syn.hypernyms()[:2]:          # check up to 2 parents
+                for sibling_syn in hypernym.hyponyms():   # co-hyponyms = siblings
+                    if sibling_syn == syn:
+                        continue
+                    for lemma in sibling_syn.lemmas():
+                        name = lemma.name().replace("_", " ").lower()
+                        if name != word.lower() and " " not in name:
+                            siblings.add(name)
+    except Exception:
+        pass
+    return siblings
+
+
+def _word_length_ok(word: str, target: str, max_diff: int = 4) -> bool:
+    """
+    Heaton (1989) criterion 3: distractors should have approximately the same
+    length as the target word. We allow ±max_diff characters (default 4).
+    Very short words (≤4 chars) get a tighter window of ±2.
+    """
+    diff = abs(len(word) - len(target))
+    if len(target) <= 4:
+        return diff <= 2
+    return diff <= max_diff
+
+
+def _are_synonyms(word_a: str, word_b: str, pos: str) -> bool:
+    """
+    Check whether two words share a WordNet synset (are synonyms).
+    Used to avoid synonym pairs in the distractor set per Susanti et al. (2018),
+    who note that synonym pairs are 'potentially dangerous' — test-wise learners
+    can eliminate both options simultaneously.
+    """
+    try:
+        from nltk.corpus import wordnet as wn
+    except Exception:
+        return False
+
+    wn_pos = _POS_TO_WN.get((pos or "").strip().lower())
+    if wn_pos is None:
+        return False
+
+    try:
+        synsets_a = set(wn.synsets(word_a.lower(), pos=wn_pos))
+        synsets_b = set(wn.synsets(word_b.lower(), pos=wn_pos))
+        return bool(synsets_a & synsets_b)
+    except Exception:
+        return False
 
 
 def select_distractors(
@@ -222,17 +306,55 @@ def select_distractors(
     if pool.empty:
         return {"distractors": [], "fallback": True, "fallback_reason": "only_trivial_inflections_remained"}
 
+    # Heaton (1989) criterion 3 — approximately same length as target word.
+    # Applied as a soft filter: only drop if the full pool still has candidates.
+    length_filtered = pool[pool["headword"].apply(lambda hw: _word_length_ok(hw, word))]
+    if not length_filtered.empty:
+        pool = length_filtered
+
     chosen = []
     chosen_words = set()
 
-    # Slot A — semantic neighbor (WordNet near-synonyms intersected with candidate pool)
-    synonyms = _get_wordnet_synonyms(word, pos)
-    if synonyms:
-        syn_matches = pool[
-            pool["headword"].isin(synonyms) & ~pool["headword"].isin(chosen_words)
+    # Slot A — semantic neighbor
+    # Priority order per Susanti et al. (2018):
+    #   1. WordNet siblings (co-hyponyms) — share same hypernym, same semantic category,
+    #      most effective at deceiving learners without being synonymous with the target.
+    #   2. WordNet near-synonyms — semantically close but distinct enough to distract.
+    #   3. CoreInventory topic-tag match — CEFR-J specific fallback when WordNet
+    #      synonyms/siblings are all outside the ±1 CEFR band pool.
+    semantic_pick = None
+
+    # Strategy 1: WordNet siblings
+    siblings = _get_wordnet_siblings(word, pos)
+    if siblings:
+        sib_matches = pool[
+            pool["headword"].isin(siblings) & ~pool["headword"].isin(chosen_words)
         ]
-        if not syn_matches.empty:
-            pick = syn_matches.sample(1, random_state=rng.randint(0, 1_000_000)).iloc[0]
+        if not sib_matches.empty:
+            semantic_pick = sib_matches.sample(1, random_state=rng.randint(0, 1_000_000)).iloc[0]
+            chosen.append({"word": semantic_pick["headword"], "type": "semantic"})
+            chosen_words.add(semantic_pick["headword"])
+
+    # Strategy 2: WordNet synonyms
+    if semantic_pick is None:
+        synonyms = _get_wordnet_synonyms(word, pos)
+        if synonyms:
+            syn_matches = pool[
+                pool["headword"].isin(synonyms) & ~pool["headword"].isin(chosen_words)
+            ]
+            if not syn_matches.empty:
+                semantic_pick = syn_matches.sample(1, random_state=rng.randint(0, 1_000_000)).iloc[0]
+                chosen.append({"word": semantic_pick["headword"], "type": "semantic"})
+                chosen_words.add(semantic_pick["headword"])
+
+    # Strategy 3 fallback: CoreInventory topic-tag match
+    if semantic_pick is None and (core1 or core2):
+        topic_matches = pool[
+            pool.apply(lambda r: _shares_topic(r, core1, core2), axis=1)
+            & ~pool["headword"].isin(chosen_words)
+        ]
+        if not topic_matches.empty:
+            pick = topic_matches.sample(1, random_state=rng.randint(0, 1_000_000)).iloc[0]
             chosen.append({"word": pick["headword"], "type": "semantic"})
             chosen_words.add(pick["headword"])
 
@@ -248,11 +370,22 @@ def select_distractors(
     remaining_pool = pool[~pool["headword"].isin(chosen_words)]
     needed = TARGET_DISTRACTOR_COUNT - len(chosen)
     if needed > 0 and not remaining_pool.empty:
-        n = min(needed, len(remaining_pool))
-        picks = remaining_pool.sample(n=n, random_state=rng.randint(0, 1_000_000))
-        for _, pick in picks.iterrows():
-            chosen.append({"word": pick["headword"], "type": "unrelated"})
-            chosen_words.add(pick["headword"])
+        # Susanti et al. (2018): avoid synonym pairs in the option set —
+        # test-wise learners can eliminate both, making the question easier.
+        # Sample a larger candidate set and greedily pick non-synonymous words.
+        candidate_count = min(needed * 6, len(remaining_pool))
+        candidates = remaining_pool.sample(n=candidate_count, random_state=rng.randint(0, 1_000_000))
+        for _, pick in candidates.iterrows():
+            if len(chosen) >= TARGET_DISTRACTOR_COUNT:
+                break
+            hw = pick["headword"]
+            # Skip if this word is a synonym of any already-chosen distractor
+            is_syn_pair = any(
+                _are_synonyms(hw, c["word"], pos) for c in chosen
+            )
+            if not is_syn_pair:
+                chosen.append({"word": hw, "type": "unrelated"})
+                chosen_words.add(hw)
 
     fallback = len(chosen) < TARGET_DISTRACTOR_COUNT
     reason = None
@@ -312,12 +445,19 @@ def llm_frame_check(sentence: str, word: str, distractors: list, client) -> list
             for ln in response.choices[0].message.content.strip().splitlines()
             if ln.strip()
         ]
+
+        def _parse_yn(line: str) -> bool:
+            # Strip bullet/dash/word-prefix so "- pardon: yes" → "yes"
+            clean = re.sub(r'^[-•\*\s]*(?:\w[\w\s]*:\s*)?', '', line).strip()
+            # A line is a YES if it starts with "yes"; anything else (including
+            # "no", "n/a", parse failures) defaults to True to avoid false rejects.
+            if clean.startswith("no"):
+                return False
+            return True  # "yes", unclear, or empty → safe default
+
         result = []
         for i, d in enumerate(distractors):
-            if i < len(raw_lines):
-                ok = "yes" in raw_lines[i] and "no" not in raw_lines[i]
-            else:
-                ok = True  # parse miss → safe default
+            ok = _parse_yn(raw_lines[i]) if i < len(raw_lines) else True
             result.append({**d, "llm_ok": ok})
         return result
     except Exception:

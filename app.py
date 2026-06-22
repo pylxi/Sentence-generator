@@ -752,11 +752,22 @@ def api_generate():
         sentence = item.get("sentence", "").strip()
         prompt_label = item.get("prompt_label", "unlabeled")
         unknown = validate_sentence(sentence, allowed)
+
+        # Hard check: target word (or any lemma/inflection of it) must appear in sentence
+        sentence_lower = sentence.lower()
+        word_lower = word.lower()
+        target_present = (
+            word_lower in sentence_lower
+            or lemmatizer.lemmatize(word_lower, wn.VERB) in sentence_lower
+            or lemmatizer.lemmatize(word_lower, wn.NOUN) in sentence_lower
+        )
+
         results.append({
             "sentence": sentence,
             "prompt_label": prompt_label,
-            "valid": len(unknown) == 0,
+            "valid": len(unknown) == 0 and target_present,
             "unknown_words": unknown,
+            "target_missing": not target_present,
         })
     return jsonify(
         sentences=results,
