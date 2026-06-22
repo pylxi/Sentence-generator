@@ -1,0 +1,9 @@
+level,word,pos,prompt_label,sentence,sentence_id,distractor_word,distractor_type,status,fallback,fallback_reason,timestamp
+B1,abandon,verb,problem-solution,"The problem is that the city is too crowded, so we need to abandon the old town and build a new one.",319e92e6a400,pardon,form,approved,False,,2026-06-20T10:17:56.099516
+B1,abandon,verb,problem-solution,"The problem is that the city is too crowded, so we need to abandon the old town and build a new one.",319e92e6a400,experience,unrelated,approved,False,,2026-06-20T10:17:56.099516
+B1,abandon,verb,problem-solution,"The problem is that the city is too crowded, so we need to abandon the old town and build a new one.",319e92e6a400,tolerate,unrelated,approved,False,,2026-06-20T10:17:56.099516
+B1,abandon,verb,decision-result,"After careful consideration, the team decided to abandon their original plan and try a new approach.",81051c6e7727,pardon,form,approved,False,,2026-06-20T10:18:23.949263
+B1,abandon,verb,decision-result,"After careful consideration, the team decided to abandon their original plan and try a new approach.",81051c6e7727,disable,unrelated,approved,False,,2026-06-20T10:18:23.949263
+B1,abandon,verb,decision-result,"After careful consideration, the team decided to abandon their original plan and try a new approach.",81051c6e7727,rid,unrelated,approved,False,,2026-06-20T10:18:23.949263
+B1,abandon,verb,problem-solution,The solution to the traffic problem is to abandon the old road and build a new highway.,a0807cf8442c,pardon,form,approved,False,,2026-06-20T10:18:23.949263
+B1,abandon,verb,problem-solution,The solution to the traffic problem is to abandon the old road and build a new highway.,a0807cf8442c,bookmark,unrelated,approved,False,,2026-06-20T10:18:23.949263

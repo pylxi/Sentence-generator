@@ -1,0 +1,11 @@
+level,word,prompt_label,sentence,original_sentence,edited,status,timestamp
+B1,abandon,problem-solution,"The problem is that the city is too crowded, so we need to abandon the old town and build a new one.","The problem is that the city is too crowded, so we need to abandon the old town and build a new one.",False,accepted,2026-06-19T15:22:02.194933
+B1,abandon,decision-result,"After careful consideration, the team decided to abandon their original plan and try a new approach.","After careful consideration, the team decided to abandon their original plan and try a new approach.",False,accepted,2026-06-19T15:22:02.194933
+B1,abandon,problem-solution,The solution to the traffic problem is to abandon the old road and build a new highway.,The solution to the traffic problem is to abandon the old road and build a new highway.,False,accepted,2026-06-19T15:22:02.194933
+B1,abandon,contrast,"In contrast to the other teams, ours will not abandon its aggressive playing style.","In contrast to the other teams, ours will not abandon its aggressive playing style.",False,accepted,2026-06-19T15:22:02.194933
+A1,about,contrast,"I am happy, but my brother is sad about the news.","I am happy, but my brother is sad about the news.",False,accepted,2026-06-19T18:50:16.903246
+A1,above,emotional-context,"I feel happy when I am above the water, swimming in the sea.","I feel happy when I am above the water, swimming in the sea.",False,accepted,2026-06-19T18:53:27.433333
+A1,above,cause-effect,The plane is flying above the clouds because the weather is bad below.,The plane is flying above the clouds because the weather is bad below.,False,accepted,2026-06-19T18:53:27.433333
+A1,above,contrast,"The bird is flying above the trees, but the dog is running below.","The bird is flying above the trees, but the dog is running below.",False,accepted,2026-06-19T18:53:27.433333
+A1,action,emotional-context,The movie was an action movie and it made me feel excited.,The movie was an action movie and it made me feel excited.,False,accepted,2026-06-19T18:55:59.405764
+A1,action,contrast,The action of playing soccer is very different from the action of playing tennis.,The action of playing soccer is very different from the action of playing tennis.,False,accepted,2026-06-19T18:55:59.405764

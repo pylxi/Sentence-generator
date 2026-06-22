@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phrase Books - SentenceStudio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#edece9;--text:#15151c;--muted:#6b6b75;--line:rgba(17,17,26,0.10);--accent:#ef6b4a}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+button,input{font:inherit}
+.hidden{display:none!important}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-thumb{background:rgba(17,17,26,0.16);border-radius:999px;border:3px solid transparent;background-clip:padding-box}
+.screen{height:100vh;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--bg);flex-shrink:0}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.ghost-btn{display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(17,17,26,0.14);background:#fff;color:#3a3a44;border-radius:999px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;transition:border-color .15s}
+.ghost-btn:hover{border-color:rgba(17,17,26,0.28)}
+.scroll-body{flex:1;min-height:0;overflow-y:auto}
+.lvl-badge{display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:30px;padding:0 9px;border-radius:8px;color:#fff;font-size:14px;font-weight:900}
+.spine-btn{position:relative;display:flex;align-items:stretch;width:100%;text-align:left;cursor:pointer;border:0;border-radius:9px;overflow:hidden;box-shadow:0 2px 0 rgba(17,17,26,0.14),0 11px 22px rgba(17,17,26,0.12);transition:transform .12s}
+.spine-btn:hover{transform:translateX(3px)}
+.topic-tab{writing-mode:vertical-rl;text-orientation:mixed;border:0;cursor:pointer;padding:13px 0;margin-right:9px;border-radius:0 9px 9px 0;font-size:12px;font-weight:800;letter-spacing:0.03em;transition:all .12s}
+.word-card{display:flex;align-items:center;gap:12px;width:100%;text-align:left;cursor:pointer;border:1px solid rgba(17,17,26,0.08);background:#fff;border-radius:12px;padding:11px 13px;transition:all .12s}
+.word-card:hover{border-color:rgba(17,17,26,0.26);box-shadow:0 7px 16px rgba(17,17,26,0.06)}
+.seg-btn{border:0;cursor:pointer;padding:7px 13px;border-radius:8px;font-size:12px;font-weight:800;transition:all .12s}
+.seg-active{background:#15151c;color:#fff}
+.seg-inactive{background:transparent;color:var(--muted)}
+.toast{position:fixed;right:18px;bottom:18px;max-width:380px;padding:13px 16px;border-radius:13px;background:#15151c;color:#fff;font-size:13px;font-weight:700;box-shadow:0 16px 32px rgba(17,17,26,0.28);z-index:300;animation:slideUp .3s ease}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+</style>
+</head>
+<body>
+
+<!-- ========== SHELF (Home) ========== -->
+<div class="screen" id="screen-shelf">
+    <div class="topbar">
+        <div class="topbar-left">
+            <span style="width:23px;height:23px;border-radius:7px;background:var(--accent);display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900">S</span>
+            <span style="font-size:16px;font-weight:800;letter-spacing:-0.02em">SentenceStudio</span>
+            <span style="font-size:12px;color:#9a9aa2;font-weight:600">CEFR sentence bank</span>
+        </div>
+        <a href="/" class="ghost-btn">&larr; Generator</a>
+    </div>
+    <div class="scroll-body">
+        <div style="max-width:980px;margin:0 auto;padding:30px 22px 60px;width:100%">
+            <h1 style="font-size:26px;line-height:1.05;letter-spacing:-0.035em;font-weight:900">Phrase books by level</h1>
+            <p style="margin:8px 0 0;font-size:14px;line-height:1.55;color:var(--muted);max-width:520px">Every accepted sentence, bound into one book per CEFR level. Open a book to browse by topic, then by word.</p>
+            <div id="shelf-list" style="margin-top:18px;display:flex;flex-direction:column;gap:9px"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== BOOK INDEX ========== -->
+<div class="screen hidden" id="screen-index">
+    <div class="topbar">
+        <div class="topbar-left">
+            <button class="ghost-btn" onclick="goShelf()">&larr; Books</button>
+            <span class="lvl-badge" id="idx-badge"></span>
+            <div>
+                <div style="font-size:16px;font-weight:800;letter-spacing:-0.02em" id="idx-title"></div>
+                <div style="font-size:12px;color:#9a9aa2;font-weight:600" id="idx-meta"></div>
+            </div>
+        </div>
+    </div>
+    <div style="flex:1;min-height:0;display:flex">
+        <div style="flex:none;width:58px;background:#fbfaf8;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:6px;padding:14px 0;overflow:auto" id="topic-tabs"></div>
+        <div class="scroll-body">
+            <div style="max-width:900px;margin:0 auto;padding:22px 24px 40px" id="idx-body"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ========== WORD PAGE ========== -->
+<div class="screen hidden" id="screen-word">
+    <div class="topbar">
+        <div class="topbar-left">
+            <button class="ghost-btn" onclick="backToIndex()">&larr; Index</button>
+            <span class="lvl-badge" id="wd-badge"></span>
+            <span id="wd-topic-pill"></span>
+        </div>
+        <div style="display:inline-flex;align-items:center;background:#fff;border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px">
+            <button class="seg-btn seg-active" id="btn-entry" onclick="setWordStyle('entry')">Entry</button>
+            <button class="seg-btn seg-inactive" id="btn-cards" onclick="setWordStyle('cards')">Cards</button>
+        </div>
+    </div>
+    <div style="flex:1;min-height:0;display:flex">
+        <div class="scroll-body">
+            <div style="max-width:760px;margin:0 auto;padding:18px 24px 44px" id="wd-body"></div>
+        </div>
+        <div id="wd-edge" style="flex:none;width:14px"></div>
+        <div style="flex:none;width:18px;background:repeating-linear-gradient(90deg,#f7f4ee 0 2px,#e3ddd2 2px 4px)"></div>
+    </div>
+</div>
+
+<script>
+const LEVELS = {{ levels | tojson }};
+const LV_META = {
+    A1:{name:'Beginner',color:'#5aa469'},A2:{name:'Elementary',color:'#3f9a8a'},
+    B1:{name:'Intermediate',color:'#4f8fc0'},B2:{name:'Upper-intermediate',color:'#5566b8'},
+    C1:{name:'Advanced',color:'#8a5fb0'},C2:{name:'Proficiency',color:'#c2566f'}
+};
+const PROMPT_COLORS = {
+    contrast:'#ef6b4a','cause-effect':'#ef6b4a','problem-solution':'#c25c7a',
+    'emotional-context':'#8a5fb0','decision-result':'#c9882e',unlabeled:'#7a8090'
+};
+
+let currentLevel = null;
+let bookData = [];
+let flatWords = [];
+let currentTopic = null;
+let currentWordIdx = 0;
+let wordStyle = 'entry';
+
+function esc(s){return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function soft(hex,a){const h=hex.replace('#','');return `rgba(${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)},${a})`}
+function prettyLabel(l){return(l||'unlabeled').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}
+function pad(n){return String(n).padStart(3,'0')}
+function highlight(text,word){
+    const safe=esc(text);const e=word.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    return safe.replace(new RegExp(`(\\b${e}\\w*)`,'gi'),`<span style="font-weight:800;color:var(--text)">$1</span>`);
+}
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));document.getElementById(id).classList.remove('hidden')}
+
+// ── Shelf ──
+async function loadShelf(){
+    const r=await fetch('/api/levels');const d=await r.json();
+    const el=document.getElementById('shelf-list');
+    el.innerHTML=(d.levels||[]).map(l=>{
+        const m=LV_META[l.code]||{name:l.code,color:'#888'};
+        const pct=l.total_words>0?Math.round(l.complete_count/l.total_words*100):0;
+        return `<button class="spine-btn" style="background:linear-gradient(160deg,${m.color},${m.color}cc)" onclick="openBook('${l.code}')">
+            <span style="flex:none;width:7px;background:rgba(0,0,0,0.18)"></span>
+            <span style="flex:1;min-width:0;padding:17px 20px;display:flex;flex-direction:column;gap:8px">
+                <span style="display:flex;align-items:center;gap:11px">
+                    <span style="display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:31px;border-radius:6px;background:rgba(255,255,255,0.16);color:#fff;font-size:15px;font-weight:900;border:1px solid rgba(255,255,255,0.38)">${l.code}</span>
+                    <span style="font-size:17px;font-weight:800;color:#fff;letter-spacing:-0.02em">${esc(m.name)}</span>
+                    <span style="font-size:12px;color:rgba(255,255,255,0.72);font-weight:600">phrase book</span>
+                    <span style="margin-left:auto;font-size:11px;font-weight:800;color:rgba(255,255,255,0.9);letter-spacing:0.04em">${l.sentence_count} sentences</span>
+                </span>
+                <span style="font-size:12px;color:rgba(255,255,255,0.85);font-weight:600">${l.total_words} words &middot; ${l.complete_count} complete &middot; ${pct}% to goal</span>
+            </span>
+            <span style="flex:none;width:30px;background:repeating-linear-gradient(90deg,#f7f4ee 0 2px,#e3ddd2 2px 4px)"></span>
+        </button>`;
+    }).join('');
+}
+
+function goShelf(){show('screen-shelf')}
+
+// ── Book Index ──
+async function openBook(level){
+    currentLevel=level;currentTopic=null;
+    const m=LV_META[level]||{name:level,color:'#888'};
+    document.getElementById('idx-badge').style.background=m.color;
+    document.getElementById('idx-badge').textContent=level;
+    document.getElementById('idx-title').textContent=m.name+' phrase book';
+    show('screen-index');
+
+    const r=await fetch(`/api/phrasebook/${level}`);const d=await r.json();
+    bookData=d.topics||[];
+    flatWords=[];
+    bookData.forEach(tp=>tp.words.forEach(w=>flatWords.push({...w,topic:tp.topic})));
+
+    const totalS=bookData.reduce((a,t)=>a+t.sentence_count,0);
+    const totalW=bookData.reduce((a,t)=>a+t.word_count,0);
+    document.getElementById('idx-meta').textContent=`${totalS} phrases · ${totalW} words · ${bookData.length} topics`;
+
+    renderTabs();
+    renderIndex();
+}
+
+function renderTabs(){
+    const el=document.getElementById('topic-tabs');
+    const active=currentTopic||'all';
+    let html=`<button class="topic-tab" style="background:${active==='all'?'#15151c':soft('#15151c',0.1)};color:${active==='all'?'#fff':'#15151c'}" onclick="filterTopic(null)">ALL</button>`;
+    bookData.forEach(tp=>{
+        const isActive=active===tp.topic;
+        html+=`<button class="topic-tab" style="background:${isActive?'var(--accent)':soft('#ef6b4a',0.1)};color:${isActive?'#fff':'var(--accent)'}" onclick="filterTopic('${esc(tp.topic)}')">${esc(tp.topic.length>12?tp.topic.slice(0,10)+'..':tp.topic)}</button>`;
+    });
+    el.innerHTML=html;
+}
+
+function filterTopic(t){currentTopic=t;renderTabs();renderIndex()}
+
+function renderIndex(){
+    const el=document.getElementById('idx-body');
+    const m=LV_META[currentLevel]||{name:currentLevel,color:'#888'};
+    const topics=currentTopic?bookData.filter(t=>t.topic===currentTopic):bookData;
+
+    if(!currentTopic){
+        el.innerHTML=`<div style="font-size:11px;font-weight:800;letter-spacing:0.1em;color:${m.color};text-transform:uppercase">Index · browse by topic</div>
+        <h1 style="margin:7px 0 0;font-size:27px;line-height:1.05;letter-spacing:-0.035em;font-weight:900">${esc(m.name)} — ${flatWords.length} words across ${bookData.length} topics</h1>
+        <div style="margin-top:20px;display:flex;flex-direction:column;gap:10px">${bookData.map(tp=>`
+            <button onclick="filterTopic('${esc(tp.topic)}')" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:14px;padding:15px 17px;transition:all .12s" onmouseover="this.style.borderColor='rgba(17,17,26,0.24)'" onmouseout="this.style.borderColor='rgba(17,17,26,0.09)'">
+                <span style="flex:none;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;font-size:15px;font-weight:900">${esc(tp.topic.charAt(0).toUpperCase())}</span>
+                <span style="flex:1;min-width:0">
+                    <span style="display:flex;align-items:center;gap:9px"><span style="font-size:17px;font-weight:800;letter-spacing:-0.02em">${esc(tp.topic)}</span><span style="font-size:11px;font-weight:700;color:var(--accent)">${tp.word_count} words</span></span>
+                    <span style="display:block;margin-top:3px;font-size:12.5px;color:#9a9aa2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tp.words.slice(0,5).map(w=>esc(w.word)).join('  ·  ')}</span>
+                </span>
+                <span style="flex:none;color:#c9c9d0;font-size:18px">&rarr;</span>
+            </button>`).join('')}</div>`;
+        return;
+    }
+
+    let gi=0;
+    el.innerHTML=topics.map(tp=>{
+        const wordsHtml=tp.words.map(w=>{
+            const idx=flatWords.findIndex(fw=>fw.word===w.word&&fw.topic===tp.topic);
+            return `<button class="word-card" onclick="openWord(${idx>=0?idx:gi})">
+                <span style="flex:none;font-size:11px;font-weight:800;color:#c2bdb5;font-variant-numeric:tabular-nums">${pad(++gi)}</span>
+                <span style="flex:1;min-width:0">
+                    <span style="display:block;font-size:15px;font-weight:800;letter-spacing:-0.01em">${esc(w.word)}</span>
+                    <span style="display:block;margin-top:2px;font-size:11px;color:#9a9aa2;font-style:italic">${esc(w.pos)}</span>
+                </span>
+                <span style="flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:22px;padding:0 7px;border-radius:999px;background:${soft('#ef6b4a',0.12)};color:var(--accent);font-size:11px;font-weight:800">${w.count}</span>
+            </button>`;
+        }).join('');
+        return `<div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:24px;margin-bottom:13px">
+                <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:900">${esc(tp.topic.charAt(0).toUpperCase())}</span>
+                <span style="font-size:18px;font-weight:800;letter-spacing:-0.02em">${esc(tp.topic)}</span>
+                <span style="flex:1;height:1px;background:var(--line)"></span>
+                <span style="font-size:11px;font-weight:700;color:#9a9aa2">${tp.word_count} words</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:8px">${wordsHtml}</div>
+        </div>`;
+    }).join('');
+}
+
+function backToIndex(){show('screen-index');renderTabs();renderIndex()}
+
+// ── Word Page ──
+function openWord(idx){
+    currentWordIdx=idx;
+    show('screen-word');
+    renderWord();
+}
+
+function setWordStyle(s){
+    wordStyle=s;
+    document.getElementById('btn-entry').className='seg-btn '+(s==='entry'?'seg-active':'seg-inactive');
+    document.getElementById('btn-cards').className='seg-btn '+(s==='cards'?'seg-active':'seg-inactive');
+    renderWord();
+}
+
+function renderWord(){
+    if(!flatWords.length)return;
+    const w=flatWords[currentWordIdx];
+    const m=LV_META[currentLevel]||{name:currentLevel,color:'#888'};
+    const len=flatWords.length;
+    const prev=flatWords[(currentWordIdx-1+len)%len];
+    const next=flatWords[(currentWordIdx+1)%len];
+
+    document.getElementById('wd-badge').style.background=m.color;
+    document.getElementById('wd-badge').textContent=currentLevel;
+    document.getElementById('wd-topic-pill').innerHTML=`<span style="display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;background:${soft('#ef6b4a',0.12)};color:var(--accent);font-size:12px;font-weight:800"><span style="width:8px;height:8px;border-radius:999px;background:var(--accent)"></span>${esc(w.topic)}</span>`;
+    document.getElementById('wd-edge').style.background=m.color;
+
+    let sentencesHtml='';
+    if(wordStyle==='entry'){
+        sentencesHtml=`<div style="display:flex;flex-direction:column">${w.sentences.map((s,i)=>{
+            const pc=PROMPT_COLORS[s.prompt_label]||'#7a8090';
+            return `<div style="display:flex;gap:14px;padding:15px 2px;border-bottom:1px solid rgba(17,17,26,0.08)">
+                <span style="flex:none;width:20px;font-size:12px;font-weight:800;color:#c2bdb5;font-variant-numeric:tabular-nums;padding-top:3px">${i+1}</span>
+                <span style="flex:none;width:128px;padding-top:2px"><span style="display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;color:${pc}"><span style="width:7px;height:7px;border-radius:999px;background:${pc}"></span>${esc(prettyLabel(s.prompt_label))}</span></span>
+                <span style="flex:1;min-width:0;font-size:16.5px;line-height:1.62;color:#2a2a31">${highlight(s.sentence,w.word)}</span>
+            </div>`;
+        }).join('')}</div>`;
+    } else {
+        sentencesHtml=`<div style="margin-top:18px;display:flex;flex-direction:column;gap:10px">${w.sentences.map(s=>{
+            const pc=PROMPT_COLORS[s.prompt_label]||'#7a8090';
+            return `<div style="display:flex;background:#fff;border:1px solid var(--line);border-radius:13px;overflow:hidden;box-shadow:0 1px 2px rgba(17,17,26,0.04)">
+                <span style="flex:none;width:5px;background:${pc}"></span>
+                <div style="flex:1;min-width:0;padding:13px 16px">
+                    <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:999px;background:${soft(pc,0.12)};color:${pc};font-size:10px;font-weight:800;letter-spacing:0.03em;text-transform:uppercase">${esc(prettyLabel(s.prompt_label))}</span>
+                    <div style="margin-top:9px;font-size:16.5px;line-height:1.6;color:#2a2a31">${highlight(s.sentence,w.word)}</div>
+                </div>
+            </div>`;
+        }).join('')}</div>`;
+    }
+
+    document.getElementById('wd-body').innerHTML=`
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <button class="ghost-btn" onclick="navWord(-1)" style="max-width:46%;overflow:hidden"><span style="font-size:15px">◁</span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(prev.word)}</span></button>
+            <span style="font-size:11px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:#b4afa7;white-space:nowrap">Word ${currentWordIdx+1} of ${len}</span>
+            <button class="ghost-btn" onclick="navWord(1)" style="max-width:46%;overflow:hidden;justify-content:flex-end"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(next.word)}</span> <span style="font-size:15px">▷</span></button>
+        </div>
+        <div style="margin-top:20px;display:flex;align-items:flex-start;gap:16px">
+            <span style="flex:none;font-size:13px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:0.05em;padding-top:14px">${pad(currentWordIdx+1)}</span>
+            <div style="min-width:0;flex:1">
+                <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+                    <h1 style="margin:0;font-size:42px;line-height:1.02;letter-spacing:-0.035em;font-weight:900">${esc(w.word)}</h1>
+                    <span style="font-size:14px;font-style:italic;color:#9a9aa2;font-weight:600">${esc(w.pos)}</span>
+                </div>
+            </div>
+            <span style="flex:none;font-size:12px;font-weight:700;color:#9a9aa2;white-space:nowrap;padding-top:16px">${w.count} examples</span>
+        </div>
+        <div style="margin-top:14px;height:3px;border-radius:999px;background:var(--accent);opacity:0.85"></div>
+        ${sentencesHtml}
+    `;
+}
+
+function navWord(delta){
+    const len=flatWords.length;
+    currentWordIdx=(currentWordIdx+delta+len)%len;
+    renderWord();
+}
+
+// ── Init ──
+loadShelf();
+</script>
+</body>
+</html>
