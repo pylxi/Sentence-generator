@@ -1042,7 +1042,13 @@ def api_distractor_generate():
             word=item["word"], level=item["level"], sentence=item["sentence"],
             pos=item["pos"], core1=item.get("core1", ""), core2=item.get("core2", ""),
         )
-        results.append({**item, "distractors": outcome["distractors"],
+        checked = distractor_logic.llm_frame_check(
+            sentence=item["sentence"],
+            word=item["word"],
+            distractors=outcome["distractors"],
+            client=GROQ_CLIENT,
+        )
+        results.append({**item, "distractors": checked,
                         "fallback": outcome["fallback"], "fallback_reason": outcome["fallback_reason"]})
     return jsonify(results=results)
 

@@ -164,12 +164,36 @@ def passes_sentence_frame_filter(sentence: str, target_headword: str, distractor
     return True
 
 
-def _shares_topic(row_a, core1: str, core2: str) -> bool:
-    topics_a = {row_a.get("CoreInventory 1", ""), row_a.get("CoreInventory 2", "")}
-    topics_a.discard("")
-    topics_b = {core1, core2}
-    topics_b.discard("")
-    return bool(topics_a & topics_b)
+_POS_TO_WN = {"noun": "n", "verb": "v", "adjective": "a", "adverb": "r"}
+
+
+def _get_wordnet_synonyms(word: str, pos: str) -> set:
+    """
+    Return near-synonym headwords using WordNet synsets.
+    Looks at the top 3 senses to avoid noise from rare meanings.
+    Multi-word lemmas (e.g. 'give_up') are excluded — CEFR list uses single tokens.
+    Falls back to an empty set if WordNet is unavailable.
+    """
+    try:
+        from nltk.corpus import wordnet as wn
+    except Exception:
+        return set()
+
+    wn_pos = _POS_TO_WN.get((pos or "").strip().lower())
+    if wn_pos is None:
+        return set()
+
+    synonyms: set = set()
+    try:
+        synsets = wn.synsets(word.lower(), pos=wn_pos)
+        for syn in synsets[:3]:
+            for lemma in syn.lemmas():
+                name = lemma.name().replace("_", " ").lower()
+                if name != word.lower() and " " not in name:
+                    synonyms.add(name)
+    except Exception:
+        pass
+    return synonyms
 
 
 def select_distractors(
@@ -177,8 +201,8 @@ def select_distractors(
     level: str,
     sentence: str,
     pos: str,
-    core1: str = "",
-    core2: str = "",
+    core1: str = "",  # kept for API compatibility, no longer used for slot selection
+    core2: str = "",  # kept for API compatibility, no longer used for slot selection
     seed: int = None,
 ) -> dict:
     rng = random.Random(seed)
@@ -201,11 +225,14 @@ def select_distractors(
     chosen = []
     chosen_words = set()
 
-    if core1 or core2:
-        topic_matches = pool[pool.apply(lambda r: _shares_topic(r, core1, core2), axis=1)]
-        topic_matches = topic_matches[~topic_matches["headword"].isin(chosen_words)]
-        if not topic_matches.empty:
-            pick = topic_matches.sample(1, random_state=rng.randint(0, 1_000_000)).iloc[0]
+    # Slot A — semantic neighbor (WordNet near-synonyms intersected with candidate pool)
+    synonyms = _get_wordnet_synonyms(word, pos)
+    if synonyms:
+        syn_matches = pool[
+            pool["headword"].isin(synonyms) & ~pool["headword"].isin(chosen_words)
+        ]
+        if not syn_matches.empty:
+            pick = syn_matches.sample(1, random_state=rng.randint(0, 1_000_000)).iloc[0]
             chosen.append({"word": pick["headword"], "type": "semantic"})
             chosen_words.add(pick["headword"])
 
@@ -237,3 +264,62 @@ def select_distractors(
         "fallback": fallback,
         "fallback_reason": reason,
     }
+
+
+def llm_frame_check(sentence: str, word: str, distractors: list, client) -> list:
+    """
+    Option A sentence-frame plausibility filter (study design §6.4).
+
+    Sends one batched Groq call (llama-3.1-8b-instant, temp=0) asking whether
+    each distractor headword, substituted into the sentence gap, produces
+    grammatically possible English.
+
+    Adds 'llm_ok': True/False to each distractor dict.
+    Falls back to llm_ok=True for all if the call fails or parsing is ambiguous,
+    so a failed check never silently drops candidates — the human reviewer decides.
+
+    Args:
+        sentence: the full example sentence
+        word: the target headword that appears in the sentence
+        distractors: list of {"word": str, "type": str, ...}
+        client: a Groq client instance (or None to skip)
+
+    Returns:
+        The same list with 'llm_ok' bool added to each item.
+    """
+    if not distractors or client is None:
+        return [{**d, "llm_ok": True} for d in distractors]
+
+    candidate_lines = "\n".join(f"- {d['word']}" for d in distractors)
+    prompt = (
+        f'Sentence (with the target word "{word}" replaced by ___): '
+        f'"{sentence.replace(word, "___", 1)}"\n\n'
+        f"For each word below, would substituting it into the ___ gap produce "
+        f"grammatically possible English (ignoring meaning — only grammar)?\n"
+        f"Answer YES or NO for each, one per line, same order:\n"
+        f"{candidate_lines}"
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=60,
+        )
+        raw_lines = [
+            ln.strip().lower()
+            for ln in response.choices[0].message.content.strip().splitlines()
+            if ln.strip()
+        ]
+        result = []
+        for i, d in enumerate(distractors):
+            if i < len(raw_lines):
+                ok = "yes" in raw_lines[i] and "no" not in raw_lines[i]
+            else:
+                ok = True  # parse miss → safe default
+            result.append({**d, "llm_ok": ok})
+        return result
+    except Exception:
+        # Any API error → keep all candidates, flag as unchecked (True = don't block)
+        return [{**d, "llm_ok": True} for d in distractors]
